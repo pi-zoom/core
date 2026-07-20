@@ -43,6 +43,10 @@ class UI():
         # msg = json.dumps(msg)
         await self.pubSocket.send_json(msg)
 
+    def stop(self):
+        self.subSocket.close()
+        logger.debug("UI stopped")
+
     async def run(self):
         logger.info("Starting ZMQ server")
         while True:
@@ -79,6 +83,8 @@ class UI():
                     msg = CmdSequencerSelectMidiFile(file=data_json["file"])
                 elif command_type == 11:
                     msg = CmdSequencerListMidiFiles()
+                elif command_type == 12:
+                    msg = CmdTuner(state=data_json["state"])
                 else:
                     logger.error(f"Unknown ZMQ message type: {data_json}")
                     continue

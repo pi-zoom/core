@@ -82,3 +82,8 @@ class EventSequencerMidiFilesList(Event):
 @dataclass
 class EventSequencerPos(Event):
     pos: float
+
+@dataclass
+class EventTuner(Event):
+    note: str
+    cents: float

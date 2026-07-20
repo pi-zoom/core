@@ -49,3 +49,7 @@ class CmdSequencerSelectMidiFile():
 @dataclass
 class CmdSequencerListMidiFiles():
     pass
+
+@dataclass
+class CmdTuner():
+    state: bool

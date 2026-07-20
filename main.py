@@ -2,11 +2,13 @@ import asyncio
 import inspect
 import signal
 import logging
+import json
 from dataclasses import asdict
 from looper.looper import SooperLooperClient
 from ui.ui import UI
 from mod.mod import Mod
 from sequencer.sequencer import Sequencer
+from tuner.tuner import Tuner
 
 from events import *
 from command import *
@@ -61,7 +63,7 @@ looper = SooperLooperClient(eventsQueue=eventsQueue)
 ui = UI(commandsQueue=commandsQueue)
 mod = Mod("localhost", 8888, queue=eventsQueue)
 sequencer = Sequencer(eventsQueue=eventsQueue)
-
+tuner = Tuner(queue=eventsQueue)
 
 # -----------------------------
 # Shutdown handling
@@ -140,11 +142,14 @@ async def sequencerMidiFilesList(event: EventSequencerMidiFilesList):
 async def sequencerPosition(event: EventSequencerPos):
     await ui.send({"type": 11, "pos": event.pos})
 
+@event_handler
+async def tunerUpdate(event: EventTuner):
+    print(f"Note: {event.note} Cents: {event.cents}")
+    await ui.send({"type": 12, "note": event.note, "cents": event.cents})
+
 # -----------------------------
 # Commnands handling
 # -----------------------------
-import json
-
 
 @command_handler
 async def listLoopsHandler(_: CmdListLoops):
@@ -217,6 +222,13 @@ async def sequencerSelectMidiFile(event: CmdSequencerSelectMidiFile):
 async def sequencerListMidiFiles(event: CmdSequencerListMidiFiles):
     eventsQueue.put_nowait(EventSequencerMidiFilesList(midiFiles=sequencer.midi_files))
 
+@command_handler
+async def tunerState(event: CmdTuner):
+    if(event.state):
+        await tuner.start(loop=asyncio.get_event_loop())
+    else:
+        await tuner.stop()
+
 async def processCommands():
     while True:
         command = await commandsQueue.get()
@@ -263,11 +275,6 @@ async def run_app():
         asyncio.create_task(sequencer.run()),
     ]
 
-    # await mod.listPedalboards()
-
-    # await mod.start()
-    # await ui.start()
-
     # wait for Ctrl+C / SIGTERM
     await stopEvent.wait()
     logger.info("Shuting down...")
@@ -278,11 +285,9 @@ async def run_app():
 
     await asyncio.gather(*tasks, return_exceptions=True)
 
-    # close OSC transport
     looper.stop()
     ui.stop()
 
-    # drain queue (optional but safe)
     await eventsQueue.join()
 
     logger.info("Shutdown complete.")
@@ -292,145 +297,3 @@ async def run_app():
 
 if __name__ == "__main__":
     asyncio.run(run_app())
-
-# if __name__ == '__main__':
-#     looper = SooperLooperClient(rxCallback=rx_from_looper)
-#     ui = UI(rxCallback=rx_from_ui)
-#     looper.register_loop_pos_update(loop=0)
-#     looper.register_loop_count()
-
-
-# import asyncio
-# import signal
-
-# import zmq
-# import zmq.asyncio
-# from pythonosc.osc_server import AsyncIOOSCUDPServer
-# from pythonosc.dispatcher import Dispatcher
-# from pythonosc.udp_client import SimpleUDPClient
-
-# # -----------------------------
-# # Shared event queue
-# # -----------------------------
-# events_queue = asyncio.Queue(maxsize=10000)
-# stopEvent = asyncio.Event()
-
-
-# # -----------------------------
-# # ZMQ receiver
-# # -----------------------------
-# async def zmq_receiver():
-#     ctx = zmq.asyncio.Context()
-#     sock = ctx.socket(zmq.SUB)
-#     sock.connect("tcp://localhost:5555")
-#     sock.setsockopt_string(zmq.SUBSCRIBE, "")
-
-#     try:
-#         while not stopEvent.is_set():
-#             msg = await sock.recv_string()
-
-#             event = {
-#                 "source": "zmq",
-#                 "data": msg,
-#             }
-
-#             await queue.put(event)
-
-#     except asyncio.CancelledError:
-#         pass
-#     finally:
-#         sock.close()
-#         ctx.term()
-
-
-# def loop_count(address, hostUrl, version, loopCount):
-#     print("Loop count")
-
-# def loop_auto_update(address, loop, control, value):
-#     print("loop update")
-
-# dispatcher = Dispatcher()
-# dispatcher.map("/looper/loop_auto_update", loop_auto_update)
-# dispatcher.map("/looper/loop_count", loop_count)
-
-
-# async def start_osc_server(host="0.0.0.0", port=9000):
-#     loop = asyncio.get_running_loop()
-
-#     server = AsyncIOOSCUDPServer(server_address=("127.0.0.1", 9952), dispatcher=dispatcher, loop=asyncio.get_event_loop())
-#     transport, protocol = await server.create_serve_endpoint()
-
-#     return transport
-
-# -----------------------------
-# Event processor
-# -----------------------------
-# async def processor():
-#     while True:
-#         try:
-#             event = await asyncio.wait_for(queue.get(), timeout=0.5)
-#         except asyncio.TimeoutError:
-#             if stopEvent.is_set() and queue.empty():
-#                 break
-#             continue
-
-#         try:
-#             await handle_event(event)
-#         finally:
-#             queue.task_done()
-
-
-# async def handle_event(event):
-#     if event["source"] == "zmq":
-#         print("[ZMQ]", event["data"])
-
-#     elif event["source"] == "osc":
-#         print("[OSC]", event["addr"], len(event["raw"]))
-
-
-# # -----------------------------
-# # Shutdown handling
-# # -----------------------------
-# def setup_signals(loop):
-#     loop.add_signal_handler(signal.SIGINT, stopEvent.set)
-#     loop.add_signal_handler(signal.SIGTERM, stopEvent.set)
-
-
-# -----------------------------
-# Main
-# -----------------------------
-# async def main():
-#     loop = asyncio.get_running_loop()
-#     setup_signals(loop)
-
-#     print("Starting system...")
-
-#     osc_transport = await start_osc_server()
-#     oscClient = SimpleUDPClient("127.0.0.1", 9951)
-#     oscClient.send_message(address="/register", value=["127.0.0.1:9952", "/looper/loop_count"])
-#     tasks = [
-#         asyncio.create_task(zmq_receiver()),
-#         asyncio.create_task(processor()),
-#     ]
-
-#     # wait for Ctrl+C / SIGTERM
-#     await stopEvent.wait()
-#     print("Shutdown requested...")
-
-#     # stop receivers
-#     for t in tasks:
-#         t.cancel()
-
-#     await asyncio.gather(*tasks, return_exceptions=True)
-
-#     # close OSC transport
-#     osc_transport.close()
-
-#     # drain queue (optional but safe)
-#     await queue.join()
-
-#     print("Shutdown complete.")
-
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
