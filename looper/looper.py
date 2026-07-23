@@ -3,7 +3,7 @@ from pythonosc.osc_server import AsyncIOOSCUDPServer
 from pythonosc.dispatcher import Dispatcher
 from typing import List, Any
 import asyncio
-import threading
+import jack
 import logging
 from .protocol import OSCMessage, SLCommand, SLGetControl, SLSetControl
 from events import *
@@ -23,6 +23,12 @@ class Loop:
     state: int
 
 
+connections = {
+    "mod-monitor:out_1": "sooperlooper:common_in_1",
+    "mod-monitor:out_2": "sooperlooper:common_in_1",
+    "sooperlooper:common_out_1": ["system:playback_1", "system:playback_2"]
+}
+
 class SooperLooperClient:
 
     def __init__(
@@ -39,6 +45,9 @@ class SooperLooperClient:
         self.sendQueue = asyncio.Queue()
         self.tasks = []
 
+        self.jack: jack.Client = None
+        self.ports_changed = asyncio.Event()
+
         self.oscClient = None
         self.oscServer = None
         self.oscTransport = None
@@ -53,6 +62,12 @@ class SooperLooperClient:
 
         self._init_osc()
         self._init_default_looper()
+        self._init_jack()
+
+    def _init_jack(self):
+        self.jack = jack.Client("port_connector")
+        self.jack.set_port_registration_callback(self._port_registered)
+        self.jack.activate()
 
     def _init_osc(self):
         self.dispatcher = Dispatcher()
@@ -63,6 +78,45 @@ class SooperLooperClient:
         self.dispatcher.map("/looper/pong", self._pongHandler)
         self.dispatcher.set_default_handler(self._defaultHandler)
         self.oscClient = SimpleUDPClient(self.host, self.port)
+
+    def _port_registered(self, port: jack.Port, registered):
+
+        if not registered:
+            return
+
+        if not port.is_audio:
+            return
+
+        allPorts = list(connections.keys())
+        for v in list(connections.values()):
+            if isinstance(v, str):
+                allPorts.append(v)
+            elif isinstance(v, list):
+                allPorts += v
+
+        if port.name not in allPorts:
+            return
+
+        self.ports_changed.set()
+
+
+    async def connector(self):
+        logger.debug("Starting jack connector")
+        while True:
+            await self.ports_changed.wait()
+            self.ports_changed.clear()
+
+            src_ports = [x.name for x in self.jack.get_ports(is_audio=True, is_output=True)]
+            dst_ports = [x.name for x in self.jack.get_ports(is_audio=True, is_input=True)]
+
+            for src, dest in connections.items():
+                if src in src_ports and dest in dst_ports:
+                    try:
+                        self.jack.connect(src, dest)
+                        logger.debug(f"Connected: {src} -> {dest}")
+                    except jack.JackErrorCode as error:
+                        if error.code != 17:
+                            logger.error(error.code)
 
     async def run(self):
 
@@ -78,6 +132,7 @@ class SooperLooperClient:
 
         self.tasks.append(self._sendTask())
         self.tasks.append(self._pingTask())
+        self.tasks.append(self.connector())
         await asyncio.gather(*self.tasks)
 
     def stop(self):
