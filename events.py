@@ -91,3 +91,15 @@ class EventTuner(Event):
 @dataclass
 class EventRecordedFilesList(Event):
     files: list[str]
+
+@dataclass
+class EventRecorderPlaying(Event):
+    file: str
+
+@dataclass
+class EventRecorderRecording(Event):
+    start: int
+
+@dataclass
+class EventRecorderStopped(Event):
+    pass

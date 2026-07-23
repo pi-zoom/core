@@ -2,9 +2,10 @@ from enum import Enum
 import subprocess
 import signal
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import asyncio
+from events import *
 
 logger = logging.getLogger("recorder")
 
@@ -15,12 +16,14 @@ class RecorderStates(Enum):
     PLAYING = "playing"
 
 class Recorder:
-    def __init__(self):
+    def __init__(self, eventQueue: asyncio.Queue):
+        self.eventQueue: asyncio.Queue = eventQueue
         self.process = None
         self.state = RecorderStates.STOPPED
-        self.output_path = "/home/marius/recordings"
-        self.recorded_files = list[str]
+        self.output_path: str = "/home/marius/recordings"
+        self.recorded_files: list[str] = []
         self.play_task: asyncio.Task = None
+
         self.list_recorded_files()
 
     def list_recorded_files(self):
@@ -29,6 +32,7 @@ class Recorder:
         files = os.listdir(self.output_path)
         self.recorded_files = list(filter(lambda x: not os.path.isfile(x), files))
         self.recorded_files.sort(reverse=True)
+        self.eventQueue.put_nowait(EventRecordedFilesList(files=self.recorded_files))
 
     async def start_recording(self):
         await self.stop()
@@ -40,6 +44,7 @@ class Recorder:
         self.process = await asyncio.create_subprocess_exec('jack_capture', '-ns', '-f', 'ogg', '-V', '-dc', filepath)
         self.state = RecorderStates.RECORDING
         logger.info("Recording started")
+        self.eventQueue.put_nowait(EventRecorderRecording(start=int(datetime.now(timezone.utc).timestamp())))
 
     async def stop(self):
 
@@ -57,6 +62,7 @@ class Recorder:
         self.state = RecorderStates.STOPPED
         self.list_recorded_files()
         logger.info("Stopped")
+        self.eventQueue.put_nowait(EventRecorderStopped())
 
     async def _wait_playback_finished(self):
         process = self.process
@@ -65,6 +71,7 @@ class Recorder:
         if self.process is process:
             self.process = None
             self.state = RecorderStates.STOPPED
+            self.eventQueue.put_nowait(EventRecorderStopped())
 
     async def start_playing(self, filename: str):
         await self.stop()
@@ -77,3 +84,4 @@ class Recorder:
         self.state = RecorderStates.PLAYING
         logger.info("Playing started")
         self.play_task = asyncio.create_task(self._wait_playback_finished())
+        self.eventQueue.put_nowait(EventRecorderPlaying(file=filename))

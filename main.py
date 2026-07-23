@@ -65,7 +65,7 @@ ui = UI(commandsQueue=commandsQueue)
 mod = Mod("localhost", 8888, queue=eventsQueue)
 sequencer = Sequencer(eventsQueue=eventsQueue)
 tuner = Tuner(queue=eventsQueue)
-recorder = Recorder()
+recorder = Recorder(eventQueue=eventsQueue)
 
 # -----------------------------
 # Shutdown handling
@@ -152,6 +152,18 @@ async def tunerUpdate(event: EventTuner):
 @event_handler
 async def recordedFileList(event: EventRecordedFilesList):
     await ui.send({"type": 13, "files": event.files})
+
+@event_handler
+async def recorderPlaying(event: EventRecorderPlaying):
+    await ui.send({"type": 14, "file": event.file})
+
+@event_handler
+async def recorderRecording(event: EventRecorderRecording):
+    await ui.send({"type": 15, "start": event.start})
+
+@event_handler
+async def recorderStopped(event: EventRecorderStopped):
+    await ui.send({"type": 16})
 
 # -----------------------------
 # Commnands handling
