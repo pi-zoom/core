@@ -80,28 +80,27 @@ class SooperLooperClient:
         self.oscClient = SimpleUDPClient(self.host, self.port)
 
     def _port_registered(self, port: jack.Port, registered):
-
         if not registered:
             return
 
         if not port.is_audio:
             return
-
+        logger.info(port.name)
         allPorts = list(connections.keys())
         for v in list(connections.values()):
             if isinstance(v, str):
                 allPorts.append(v)
             elif isinstance(v, list):
                 allPorts += v
-
+        print(allPorts)
         if port.name not in allPorts:
             return
-
+        logger.info(f"new port: {port.name}")
         self.ports_changed.set()
 
 
     async def connector(self):
-        logger.debug("Starting jack connector")
+        logger.info("Starting jack connector")
         while True:
             await self.ports_changed.wait()
             self.ports_changed.clear()
@@ -110,13 +109,17 @@ class SooperLooperClient:
             dst_ports = [x.name for x in self.jack.get_ports(is_audio=True, is_input=True)]
 
             for src, dest in connections.items():
-                if src in src_ports and dest in dst_ports:
-                    try:
-                        self.jack.connect(src, dest)
-                        logger.debug(f"Connected: {src} -> {dest}")
-                    except jack.JackErrorCode as error:
-                        if error.code != 17:
-                            logger.error(error.code)
+                if src in src_ports:
+                    if isinstance(dest, str):
+                       dest = [dest]
+                    for dst in dest:
+                        if dst in dst_ports:
+                            try:
+                                self.jack.connect(src, dst)
+                                logger.info(f"Connected: {src} -> {dest}")
+                            except jack.JackErrorCode as error:
+                                if error.code != 17:
+                                    logger.error(error.code)
 
     async def run(self):
 
