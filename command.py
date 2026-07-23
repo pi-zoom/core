@@ -51,5 +51,13 @@ class CmdSequencerListMidiFiles():
     pass
 
 @dataclass
+class CmdSequencerState():
+    state: bool
+
+@dataclass
+class CmdSequencerMute():
+    mute: bool
+
+@dataclass
 class CmdTuner():
     state: bool

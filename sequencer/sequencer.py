@@ -156,12 +156,12 @@ class Sequencer:
         self._bpm = bpm
 
     def set_state(self, play: bool):
-        self.sendQueue.put_nowait({"address": "/sequencer/state", "value": play})
+        self.sendQueue.put_nowait({"address": "/sequencer/state", "value": int(play)})
 
     def set_volume(self, volume: int):
         self.sendQueue.put_nowait({"address": "/sequencer/volume", "value": volume})
         self._volume = volume
 
     def set_mute(self, mute: bool):
-        self.sendQueue.put_nowait({"address": "/sequencer/mute", "value": mute})
+        self.sendQueue.put_nowait({"address": "/sequencer/mute", "value": int(mute)})
         self._muted = mute

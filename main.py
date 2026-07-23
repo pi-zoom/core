@@ -223,6 +223,14 @@ async def sequencerListMidiFiles(event: CmdSequencerListMidiFiles):
     eventsQueue.put_nowait(EventSequencerMidiFilesList(midiFiles=sequencer.midi_files))
 
 @command_handler
+async def sequencerState(event: CmdSequencerState):
+    sequencer.set_state(play=event.state)
+
+@command_handler
+async def sequencerMute(event: CmdSequencerMute):
+    sequencer.set_mute(mute=event.mute)
+
+@command_handler
 async def tunerState(event: CmdTuner):
     if(event.state):
         await tuner.start(loop=asyncio.get_event_loop())
@@ -237,6 +245,7 @@ async def processCommands():
             logger.debug(f"Received command : {command}")
             if handler:
                 try:
+                    # use iscoroutinefunction
                     await handler(command)
                 except Exception as error:
                     logger.exception(f"Error in handler {handler}. Error: {error}")
