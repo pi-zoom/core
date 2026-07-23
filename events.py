@@ -87,3 +87,7 @@ class EventSequencerPos(Event):
 class EventTuner(Event):
     note: str
     cents: float
+
+@dataclass
+class EventRecordedFilesList(Event):
+    files: list[str]

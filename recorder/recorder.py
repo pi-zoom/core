@@ -1,0 +1,79 @@
+from enum import Enum
+import subprocess
+import signal
+import logging
+from datetime import datetime
+import os
+import asyncio
+
+logger = logging.getLogger("recorder")
+
+
+class RecorderStates(Enum):
+    STOPPED = "stopped"
+    RECORDING = "recording"
+    PLAYING = "playing"
+
+class Recorder:
+    def __init__(self):
+        self.process = None
+        self.state = RecorderStates.STOPPED
+        self.output_path = "/home/marius/recordings"
+        self.recorded_files = list[str]
+        self.play_task: asyncio.Task = None
+        self.list_recorded_files()
+
+    def list_recorded_files(self):
+        if not os.path.exists(self.output_path):
+            return
+        files = os.listdir(self.output_path)
+        self.recorded_files = list(filter(lambda x: not os.path.isfile(x), files))
+        self.recorded_files.sort(reverse=True)
+
+    async def start_recording(self):
+        await self.stop()
+
+        if not os.path.exists(self.output_path):
+            os.makedirs(self.output_path)
+
+        filepath = os.path.join(self.output_path, datetime.now().strftime("%Y-%m-%d-%H:%M:%S")) + '.ogg'
+        self.process = await asyncio.create_subprocess_exec('jack_capture', '-ns', '-f', 'ogg', '-V', '-dc', filepath)
+        self.state = RecorderStates.RECORDING
+        logger.info("Recording started")
+
+    async def stop(self):
+
+        if self.state == RecorderStates.STOPPED:
+            return
+
+        if not self.process:
+            return
+
+        self.process.send_signal(signal.SIGTERM)
+        # stdout, stderr = await self.process.communicate()
+        await self.process.wait()
+
+        self.process = None
+        self.state = RecorderStates.STOPPED
+        self.list_recorded_files()
+        logger.info("Stopped")
+
+    async def _wait_playback_finished(self):
+        process = self.process
+        returncode = await process.wait()
+
+        if self.process is process:
+            self.process = None
+            self.state = RecorderStates.STOPPED
+
+    async def start_playing(self, filename: str):
+        await self.stop()
+
+        if not os.path.exists(os.path.join(self.output_path, filename)):
+            logger.error(f"File {filename} not found")
+            return
+
+        self.process = await asyncio.create_subprocess_exec('sndfile-jackplay', os.path.join(self.output_path, filename))
+        self.state = RecorderStates.PLAYING
+        logger.info("Playing started")
+        self.play_task = asyncio.create_task(self._wait_playback_finished())

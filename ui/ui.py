@@ -89,6 +89,10 @@ class UI():
                     msg = CmdSequencerMute(mute=data_json["mute"])
                 elif command_type == 14:
                     msg = CmdTuner(state=data_json["state"])
+                elif command_type == 15:
+                    msg = CmdPlayerRecord(state=data_json["state"])
+                elif command_type == 16:
+                    msg = CmdPlayerPlay(state=data_json["state"], file=data_json["file"])
                 else:
                     logger.error(f"Unknown ZMQ message type: {data_json}")
                     continue

@@ -9,6 +9,7 @@ from ui.ui import UI
 from mod.mod import Mod
 from sequencer.sequencer import Sequencer
 from tuner.tuner import Tuner
+from recorder.recorder import Recorder
 
 from events import *
 from command import *
@@ -64,6 +65,7 @@ ui = UI(commandsQueue=commandsQueue)
 mod = Mod("localhost", 8888, queue=eventsQueue)
 sequencer = Sequencer(eventsQueue=eventsQueue)
 tuner = Tuner(queue=eventsQueue)
+recorder = Recorder()
 
 # -----------------------------
 # Shutdown handling
@@ -146,6 +148,10 @@ async def sequencerPosition(event: EventSequencerPos):
 async def tunerUpdate(event: EventTuner):
     print(f"Note: {event.note} Cents: {event.cents}")
     await ui.send({"type": 12, "note": event.note, "cents": event.cents})
+
+@event_handler
+async def recordedFileList(event: EventRecordedFilesList):
+    await ui.send({"type": 13, "files": event.files})
 
 # -----------------------------
 # Commnands handling
@@ -236,6 +242,21 @@ async def tunerState(event: CmdTuner):
         await tuner.start(loop=asyncio.get_event_loop())
     else:
         await tuner.stop()
+
+@command_handler
+async def playerRecord(event: CmdPlayerRecord):
+    if event.state:
+        await recorder.start_recording()
+    else:
+        await recorder.stop()
+        eventsQueue.put_nowait(EventRecordedFilesList(files=recorder.recorded_files))
+
+@command_handler
+async def playerPlay(event: CmdPlayerPlay):
+    if event.state:
+        await recorder.start_playing(filename=event.file)
+    else:
+        await recorder.stop()
 
 async def processCommands():
     while True:

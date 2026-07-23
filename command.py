@@ -61,3 +61,12 @@ class CmdSequencerMute():
 @dataclass
 class CmdTuner():
     state: bool
+
+@dataclass
+class CmdPlayerRecord():
+    state: bool
+
+@dataclass
+class CmdPlayerPlay():
+    state: bool
+    file: str
