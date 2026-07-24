@@ -336,39 +336,46 @@ class Mod:
         self.plugins[_plugin_uri] = pl
         return pl
 
-    async def _load_pedalboards(self):
+    async def _load_pedalboard(self, bundle: str, title: str, uri: str):
+        # # check on cache
+        # if pedalboard["bundle"] in self.pedalboards:
+        #     continue
+
+        _pedalboard_info = await self._get_pedalboard_info(bundlepath=bundle)
+
+        if not _pedalboard_info:
+            return
+
+        # plugins
+        plugins = []
+        for plugin in _pedalboard_info.get("plugins", []):
+            p = await self._load_plugin(plugin=plugin)
+            if p:
+                plugins.append(p)
+
+        # add to cache
+        self.pedalboards[bundle] = Pedalboard(
+            title=title,
+            bundle=bundle,
+            uri=uri,
+            plugins=plugins,
+            snapshots=[],
+            snapshot_id=-1,
+        )
+
+        print(self.pedalboards.keys())
+
+    async def _load_all_pedalboards(self):
         """Load all pedalboards and their plugin into local cache"""
         _pedalboards = await self._list_pedalboards()
         if _pedalboards is None:
             return
 
         for pedalboard in _pedalboards:
-
-            # check on cache
-            if pedalboard["bundle"] in self.pedalboards:
-                continue
-
-            _pedalboard_info = await self._get_pedalboard_info(
-                bundlepath=pedalboard["bundle"]
-            )
-            if not _pedalboard_info:
-                continue
-
-            # plugins
-            plugins = []
-            for plugin in _pedalboard_info.get("plugins", []):
-                p = await self._load_plugin(plugin=plugin)
-                if p:
-                    plugins.append(p)
-
-            # add to cache
-            self.pedalboards[pedalboard["bundle"]] = Pedalboard(
-                title=pedalboard["title"],
+            await self._load_pedalboard(
                 bundle=pedalboard["bundle"],
+                title=pedalboard["title"],
                 uri=pedalboard["uri"],
-                plugins=plugins,
-                snapshots=[],
-                snapshot_id=-1,
             )
 
     def _get_current_pedalboard(self):
@@ -444,7 +451,12 @@ class Mod:
                             self._get_current_pedalboard()
                             # TODO: reload if required
                             if self._current_pedalboard_bundle not in self.pedalboards:
-                                await self._load_pedalboards()
+                                await self._load_all_pedalboards()
+                            else:
+                                p = self.pedalboards[self._current_pedalboard_bundle]
+                                await self._load_pedalboard(
+                                    bundle=p.bundle, title=p.title, uri=p.uri
+                                )
 
                             await self._get_pedalboard_snapshots()
                             self._push_event(
@@ -462,23 +474,24 @@ class Mod:
 
     # TODO: update list based on folder
     async def _monitor_pedalboards_folder(self):
-        logger.info(f"Starting monitoring for pedalboards on folder : {self._pedalboards_folder}")
+        logger.info(
+            f"Starting monitoring for pedalboards on folder : {self._pedalboards_folder}"
+        )
         while True:
             async for changes in awatch(self._pedalboards_folder):
                 for change, path in changes:
                     if path.endswith(".pedalboard"):
-                        if  change == Change.deleted:
+                        if change == Change.deleted:
                             logger.info(f"pedalboard folder deleted: {path}")
                         elif change == Change.added:
                             logger.info(f"New pedalboard folder detected: {path}")
-
 
     async def run(self):
         logger.info("Starting MOD")
 
         # first, init everything
         try:
-            await self._load_pedalboards()
+            await self._load_all_pedalboards()
             self._get_current_pedalboard()
             await self._get_pedalboard_snapshots()
         except Exception as err:
