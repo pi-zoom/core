@@ -105,21 +105,25 @@ async def loopSelectedHandler(event: EventLoopSelected):
 
 
 @event_handler
+async def loopListHandler(event: EventLoopsList):
+    await ui.send({"type": 5, "loops": event.loops, "selected": event.selected})
+
+@event_handler
 async def modListPedalboard(event: EventPedalboardList):
-    await ui.send({"type": 5, "pedalboards": event.pedalboards})
+    await ui.send({"type": 6, "pedalboards": event.pedalboards})
 
 
 @event_handler
 async def modPedalboardLoaded(event: EventPedalboardLoaded):
     print(json.dumps(event.pedalboard, indent=4))
-    await ui.send({"type": 6, "pedalboard": event.pedalboard})
+    await ui.send({"type": 7, "pedalboard": event.pedalboard})
 
 
 @event_handler
 async def modEffectParam(event: EventEffectParam):
     await ui.send(
         {
-            "type": 7,
+            "type": 8,
             "instance_id": event.instance_id,
             "symbol": event.symbol,
             "value": event.value,
@@ -129,12 +133,7 @@ async def modEffectParam(event: EventEffectParam):
 
 @event_handler
 async def modSnapshotChanged(event: EventSnapshotChanged):
-    await ui.send({"type": 8, "index": event.index, "name": event.name})
-
-
-@event_handler
-async def loopListHandler(event: EventLoopsList):
-    await ui.send({"type": 9, "loops": event.loops})
+    await ui.send({"type": 9, "index": event.index, "name": event.name})
 
 @event_handler
 async def sequencerMidiFilesList(event: EventSequencerMidiFilesList):
@@ -174,7 +173,7 @@ async def listLoopsHandler(_: CmdListLoops):
     loops = []
     for loop in looper.loops:
         loops.append(asdict(loop))
-    eventsQueue.put_nowait(EventLoopsList(loops=loops))
+    eventsQueue.put_nowait(EventLoopsList(loops=loops, selected=looper.selectedLoop))
 
 
 @command_handler
@@ -269,6 +268,10 @@ async def playerPlay(event: CmdPlayerPlay):
         await recorder.start_playing(filename=event.file)
     else:
         await recorder.stop()
+
+@command_handler
+async def playerListFiles(event: CmdPlayerListFiles):
+    eventsQueue.put_nowait(EventRecordedFilesList(files=recorder.recorded_files))
 
 async def processCommands():
     while True:

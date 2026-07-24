@@ -123,7 +123,7 @@ class Mod:
         self.pedalboards: dict[str, Pedalboard] = {}
         self.plugins: dict[str, Plugin] = {}
 
-        self._data_path = Path("/home/pedal/data/")
+        self._data_path = Path("/home/marius/wks/git/guitare/mod-ui/data/")
         self._last_pedalboard_path = Path(self._data_path, "last.json")
         self._pedalboards_folder = "/home/pedal/.pedalboards"
         self._current_pedalboard_name = None

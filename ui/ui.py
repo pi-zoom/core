@@ -66,15 +66,15 @@ class UI():
                 elif command_type == 2:
                     msg = CmdSelectLoop(id=data_json.get("id"))
                 elif command_type == 3:
-                    msg = CmdSelectPedalboard(name=data_json.get("name"))
-                elif command_type == 4:
-                    msg  = CmdSetEffectParam(instance_id=data_json["instance_id"], symbol=data_json["symbol"], value=data_json["value"])
-                elif command_type == 5:
-                    msg = CmdListPedalboards()
-                elif command_type == 6:
-                    msg = CmdSelectPedalboardSnapshot(index=data_json["index"])
-                elif command_type == 7:
                     msg = CmdListLoops()
+                elif command_type == 4:
+                    msg = CmdSelectPedalboard(name=data_json.get("name"))
+                elif command_type == 5:
+                    msg  = CmdSetEffectParam(instance_id=data_json["instance_id"], symbol=data_json["symbol"], value=data_json["value"])
+                elif command_type == 6:
+                    msg = CmdListPedalboards()
+                elif command_type == 7:
+                    msg = CmdSelectPedalboardSnapshot(index=data_json["index"])
                 elif command_type == 8:
                     msg = CmdSequencerSetBpm(bpm=data_json["bpm"])
                 elif command_type == 9:
@@ -93,6 +93,8 @@ class UI():
                     msg = CmdPlayerRecord(state=data_json["state"])
                 elif command_type == 16:
                     msg = CmdPlayerPlay(state=data_json["state"], file=data_json["file"])
+                elif command_type == 17:
+                    msg = CmdPlayerListFiles()
                 else:
                     logger.error(f"Unknown ZMQ message type: {data_json}")
                     continue

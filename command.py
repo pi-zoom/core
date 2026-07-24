@@ -70,3 +70,7 @@ class CmdPlayerRecord():
 class CmdPlayerPlay():
     state: bool
     file: str
+
+@dataclass
+class CmdPlayerListFiles():
+    pass

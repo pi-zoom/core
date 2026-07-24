@@ -8,6 +8,7 @@ class Event(ABC):
 @dataclass
 class EventLoopsList(Event):
     loops: list
+    selected: int
 
 @dataclass
 class EventLoopCount(Event):

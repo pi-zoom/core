@@ -1,5 +1,5 @@
 from enum import Enum
-import subprocess
+import soundfile as sf
 import signal
 import logging
 from datetime import datetime, timezone
@@ -14,6 +14,11 @@ class RecorderStates(Enum):
     STOPPED = "stopped"
     RECORDING = "recording"
     PLAYING = "playing"
+
+@dataclass
+class SoundFile:
+    name: str
+    duration: str
 
 class Recorder:
     def __init__(self, eventQueue: asyncio.Queue):
@@ -32,6 +37,12 @@ class Recorder:
         files = os.listdir(self.output_path)
         self.recorded_files = list(filter(lambda x: not os.path.isfile(x), files))
         self.recorded_files.sort(reverse=True)
+
+        for f in self.recorded_files:
+            info = sf.info(os.path.join(self.output_path, f))
+            min, sec = divmod(int(info.duration), 60)
+            print(f"File: {f} -> {min:02d}:{sec:02d}")
+
         self.eventQueue.put_nowait(EventRecordedFilesList(files=self.recorded_files))
 
     async def start_recording(self):
