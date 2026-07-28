@@ -101,7 +101,7 @@ class Mod:
         self,
         host: str,
         port: int,
-        queue: asyncio.Queue,
+        eventsQueue: asyncio.Queue,
         reconnect_min: float = 1.0,
         reconnect_max: float = 30.0,
         ping_interval: float = 20.0,
@@ -114,7 +114,7 @@ class Mod:
         self.mod_ui_url = f"http://{self.host}:{self.port}"
         self.mod_ui_ws = f"ws://{self.host}:{self.port}/websocket"
 
-        self.queue = queue
+        self.eventsQueue = eventsQueue
         self.client = httpx.AsyncClient()
 
         self._tasks: list[asyncio.Task] = []
@@ -181,7 +181,7 @@ class Mod:
             event (Event): event to push
         """
         try:
-            self.queue.put_nowait(event)
+            self.eventsQueue.put_nowait(event)
         except asyncio.QueueFull as error:
             logger.error(f"Unable to push event. Queue full")
 

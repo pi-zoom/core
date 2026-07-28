@@ -62,7 +62,7 @@ stopEvent = asyncio.Event()
 
 looper = SooperLooperClient(eventsQueue=eventsQueue)
 ui = UI(commandsQueue=commandsQueue)
-mod = Mod("localhost", 8888, queue=eventsQueue)
+mod = Mod("localhost", 8888, eventsQueue=eventsQueue)
 sequencer = Sequencer(eventsQueue=eventsQueue)
 tuner = Tuner(queue=eventsQueue)
 recorder = Recorder(eventQueue=eventsQueue)
