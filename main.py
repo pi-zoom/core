@@ -115,7 +115,6 @@ async def modListPedalboard(event: EventPedalboardList):
 
 @event_handler
 async def modPedalboardLoaded(event: EventPedalboardLoaded):
-    print(json.dumps(event.pedalboard, indent=4))
     await ui.send({"type": 7, "pedalboard": event.pedalboard})
 
 
@@ -212,9 +211,8 @@ async def listPedalboardsHandler(event: CmdListPedalboards):
         )
     )
 
-    pedalboard = mod.pedalboards.get(mod._current_pedalboard_name, None)
-    if pedalboard:
-        eventsQueue.put_nowait(EventPedalboardLoaded(pedalboard=asdict(pedalboard)))
+    if mod.current_pedalboard:
+        eventsQueue.put_nowait(EventPedalboardLoaded(pedalboard=asdict(mod.current_pedalboard)))
 
 
 @command_handler

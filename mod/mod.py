@@ -19,11 +19,20 @@ from events import (
     EventSnapshotChanged,
 )
 from watchfiles import Change, awatch
+import re
+from graphlib import TopologicalSorter
+from collections import defaultdict
+from mod.protocol import (
+    parse_message,
+    ModMessage,
+    LoadingEndMessage,
+    ParamSetMessage,
+    PedalSnapshotMessage,
+)
 
 logger = logging.getLogger("mod")
 logger.setLevel(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.ERROR)
-# logging.getLogger("watchfiles.main").setLevel(logging.ERROR)
 
 
 @dataclass
@@ -69,6 +78,7 @@ class Plugin:
     bundle: str
     category: list[str]
     params: list[PluginParameter]
+    bypassed: bool
 
 
 @dataclass
@@ -81,7 +91,6 @@ class Snapshot:
 class Pedalboard:
     title: str
     bundle: str
-    uri: str
     plugins: list[Plugin]
     snapshots: list[Snapshot]
     snapshot_id: int
@@ -122,12 +131,11 @@ class Mod:
 
         self.pedalboards: dict[str, Pedalboard] = {}
         self.plugins: dict[str, Plugin] = {}
+        self.current_pedalboard: Pedalboard = None
 
         self._data_path = Path("/home/marius/wks/git/guitare/mod-ui/data/")
         self._last_pedalboard_path = Path(self._data_path, "last.json")
         self._pedalboards_folder = "/home/pedal/.pedalboards"
-        self._current_pedalboard_name = None
-        self._current_pedalboard_bundle = None
 
     async def _request(
         self, method: str, url: str, data=None, params=None
@@ -236,8 +244,6 @@ class Mod:
 
         return plugin_info
 
-    # async def _load_plugin_parameter(self):
-
     def _check_bypass_parameter(self, control: dict):
         ret = False
         if "bypass" in [
@@ -249,9 +255,11 @@ class Mod:
         return ret
 
     async def _load_plugin(self, plugin: dict):
-        # check on cache
         if plugin["uri"] in self.plugins:
+            self.plugins.get(plugin["uri"]).bypassed = plugin.get("bypassed", False)
             return self.plugins.get(plugin["uri"])
+
+        bypassed = plugin.get("bypassed", False)
 
         _plugin_info = await self._get_plugin_info(uri=plugin["uri"])
         if not _plugin_info:
@@ -277,13 +285,8 @@ class Mod:
             ranges = control.get("ranges", {})
             if not bypassFound and self._check_bypass_parameter(control=control):
                 symbol = ":bypass"
-                ranges["default"] = plugin["bypassed"]
+                ranges["default"] = bypassed
                 bypassFound = True
-
-            # for x in plugin["ports"]:
-            #     if x["symbol"] == symbol:
-            #         print("Updating value using pedalboard info")
-            #         ranges["default"] = x["value"]
 
             plugin_parameters.append(
                 PluginParameter(
@@ -309,7 +312,7 @@ class Mod:
                     ranges={
                         "minimum": 0.0,
                         "maximum": 1.0,
-                        "default": plugin["bypassed"],
+                        "default": bypassed,
                     },
                     shortName="bypass",
                     units={
@@ -331,39 +334,60 @@ class Mod:
             label=_plugin_label,
             uri=_plugin_uri,
             params=plugin_parameters,
+            bypassed=bypassed,
         )
 
         self.plugins[_plugin_uri] = pl
         return pl
 
-    async def _load_pedalboard(self, bundle: str, title: str, uri: str):
-        # # check on cache
-        # if pedalboard["bundle"] in self.pedalboards:
-        #     continue
+    def _link_plugins(self, connections: list):
+        pattern = re.compile(r"(_[^/]+_)")
 
+        graph = defaultdict(set)
+        all_nodes = set()
+
+        for conn in connections:
+            src = pattern.match(conn["source"])
+            dst = pattern.match(conn["target"])
+
+            if src and dst:
+                src = src.group(1)
+                dst = dst.group(1)
+                graph[dst].add(src)  # dst depends on src
+                all_nodes.update([src, dst])
+
+        for node in all_nodes:
+            graph.setdefault(node, set())
+
+        order = list(TopologicalSorter(graph).static_order())
+        return order
+
+    async def _load_pedalboard(self, bundle: str):
         _pedalboard_info = await self._get_pedalboard_info(bundlepath=bundle)
-
         if not _pedalboard_info:
             return
 
         # plugins
-        plugins = []
+        plugins = {}
         for plugin in _pedalboard_info.get("plugins", []):
             p = await self._load_plugin(plugin=plugin)
             if p:
-                plugins.append(p)
+                plugins[p.instance_id] = p
 
-        # add to cache
+        links = self._link_plugins(connections=_pedalboard_info.get("connections", []))
+        sorted = []
+        for l in links:
+            sorted.append(plugins[l])
+
         self.pedalboards[bundle] = Pedalboard(
-            title=title,
+            title=_pedalboard_info.get("title"),
             bundle=bundle,
-            uri=uri,
-            plugins=plugins,
+            plugins=sorted,
             snapshots=[],
             snapshot_id=-1,
         )
 
-        print(self.pedalboards.keys())
+        return self.pedalboards[bundle]
 
     async def _load_all_pedalboards(self):
         """Load all pedalboards and their plugin into local cache"""
@@ -372,46 +396,11 @@ class Mod:
             return
 
         for pedalboard in _pedalboards:
-            await self._load_pedalboard(
-                bundle=pedalboard["bundle"],
-                title=pedalboard["title"],
-                uri=pedalboard["uri"],
-            )
+            await self._load_pedalboard(bundle=pedalboard["bundle"])
 
-    def _get_current_pedalboard(self):
-        """Read data/last.json file to get current pedalboard"""
-
-        try:
-            if not self._last_pedalboard_path.exists():
-                logger.warning(f"{self._last_pedalboard_path} not found")
-                return
-
-            if not self._last_pedalboard_path.is_file():
-                logger.warning(f"{self._last_pedalboard_path} is not a file")
-                return
-
-            with open(self._last_pedalboard_path, "r") as file:
-                pedalboard = json.load(file).get("pedalboard", "")
-                if pedalboard == "":
-                    logger.warning("Pedalboard is ''")
-                    return
-
-                self._current_pedalboard_bundle = pedalboard
-                # self._current_pedalboard_name = os.path.basename(pedalboard).replace(
-                #     ".pedalboard", ""
-                # )
-                self._current_pedalboard_name = self._current_pedalboard_bundle
-                logger.info(
-                    f"Current pedal board: {self._current_pedalboard_name} {self._current_pedalboard_bundle}"
-                )
-
-        except Exception as error:
-            logger.error(f"Unable to read current pedalboard file. Error: {error}")
-
-    async def _get_pedalboard_snapshots(self):
+    async def _set_pedalboard_snapshots(self, snapshot_id: int = None):
         """Get snapshots for the current pedalboard using mod-ui API"""
-
-        if not self._current_pedalboard_name:
+        if self.current_pedalboard is None:
             logger.error(f"Unable to get snapshot: no pedalboard selected")
             return
 
@@ -420,57 +409,31 @@ class Mod:
         )
         if not status:
             logger.error(
-                f"Unable to get snapshot for pedalboard {self._current_pedalboard_name}."
+                f"Unable to get snapshot for pedalboard {self.current_pedalboard.bundle}."
             )
             return
 
         # first, clean all snapshots
-        self.pedalboards[self._current_pedalboard_name].snapshots = []
-        self.pedalboards[self._current_pedalboard_name].snapshot_id = -1
+        self.current_pedalboard.snapshots = []
+        self.current_pedalboard.snapshot_id = -1
         for index, name in snapshots.items():
-            self.pedalboards[self._current_pedalboard_name].snapshots.append(
+            self.current_pedalboard.snapshots.append(
                 Snapshot(index=int(index), name=name)
             )
-        # select first one
-        if len(self.pedalboards[self._current_pedalboard_name].snapshots):
-            self.pedalboards[self._current_pedalboard_name].snapshot_id = 0
 
-    async def _monitor_last_pedalboard_file(self):
-        """Monitor data/last.json file to detect new pedalboard used"""
+        # init with first snapshot if possible
+        if len(self.current_pedalboard.snapshots):
+            self.current_pedalboard.snapshot_id = 0
 
-        logger.info(
-            f"Starting monitoring last pedalboard file: {self._last_pedalboard_path}"
-        )
-        while True:
-            async for changes in awatch(self._data_path):
-                for change, path in changes:
-                    if change is Change.added and Path(path) == Path(
-                        self._last_pedalboard_path
-                    ):
-                        try:
-                            self._get_current_pedalboard()
-                            # TODO: reload if required
-                            if self._current_pedalboard_bundle not in self.pedalboards:
-                                await self._load_all_pedalboards()
-                            else:
-                                p = self.pedalboards[self._current_pedalboard_bundle]
-                                await self._load_pedalboard(
-                                    bundle=p.bundle, title=p.title, uri=p.uri
-                                )
+        # set based on snapshot_id
+        if snapshot_id is not None and snapshot_id <= len(
+            self.current_pedalboard.snapshots
+        ):
+            self.current_pedalboard.snapshot_id = snapshot_id
 
-                            await self._get_pedalboard_snapshots()
-                            self._push_event(
-                                EventPedalboardLoaded(
-                                    pedalboard=asdict(
-                                        self.pedalboards[self._current_pedalboard_name]
-                                    )
-                                )
-                            )
-                            break
-                        except Exception as err:
-                            logger.error(
-                                f"Unable to read file: { traceback.print_exc()}"
-                            )
+    async def _set_current_pedalboard(self, bundle: str, snapshot_id: int):
+        self.current_pedalboard = await self._load_pedalboard(bundle=bundle)
+        await self._set_pedalboard_snapshots(snapshot_id)
 
     # TODO: update list based on folder
     async def _monitor_pedalboards_folder(self):
@@ -489,22 +452,8 @@ class Mod:
     async def run(self):
         logger.info("Starting MOD")
 
-        # first, init everything
-        try:
-            await self._load_all_pedalboards()
-            self._get_current_pedalboard()
-            await self._get_pedalboard_snapshots()
-        except Exception as err:
-            logger.error(f"okokok {err}")
-
-        if self._current_pedalboard_name not in self.pedalboards:
-            logger.warning(
-                f"Current pedalboard {self._current_pedalboard_name} not found in pedalboards list. Must reset"
-            )
-
         self._tasks = [
-            asyncio.create_task(self._monitor_last_pedalboard_file()),
-            asyncio.create_task(self._monitor_pedalboards_folder()),
+            # asyncio.create_task(self._monitor_pedalboards_folder()),
             asyncio.create_task(self._start()),
         ]
         await asyncio.gather(self._tasks)
@@ -519,33 +468,44 @@ class Mod:
         self._tasks = []
 
     async def _start(self):
-        try:
-            async with websockets.connect(self.mod_ui_ws, logger=logger) as websocket:
-                logger.info("WS Connected")
-                self.ws = websocket
+        while True:
+            try:
+                async with websockets.connect(
+                    self.mod_ui_ws, logger=logger
+                ) as websocket:
+                    logger.info("Mod WS Connected")
+                    self.ws = websocket
 
-                # drain
-                flushed = 0
-                while not self.rx_queue.empty():
-                    try:
-                        self.rx_queue.get_nowait()
-                        flushed += 1
-                    except self.rx_queue.empty():
-                        break
-                if flushed:
-                    logger.info(
-                        f"Flushed {flushed} stale messages from queue after reconnect"
+                    # drain
+                    flushed = 0
+                    while not self.rx_queue.empty():
+                        try:
+                            self.rx_queue.get_nowait()
+                            flushed += 1
+                        except self.rx_queue.empty():
+                            break
+                    if flushed:
+                        logger.info(
+                            f"Flushed {flushed} stale messages from queue after reconnect"
+                        )
+
+                    await self._load_all_pedalboards()
+
+                    rx = asyncio.create_task(self._wsReceiveTask())
+                    tx = asyncio.create_task(self._wsSendTask())
+
+                    done, pending = await asyncio.wait(
+                        {rx, tx},
+                        return_when=asyncio.FIRST_EXCEPTION,
                     )
 
-                rx = asyncio.create_task(self._wsReceiveTask())
-                tx = asyncio.create_task(self._wsSendTask())
+            except ConnectionRefusedError as error:
+                logger.error(f"Unable to connect to MOD. {error}")
+            except Exception as error:
+                logger.error(f"Error: {error}")
 
-                done, pending = await asyncio.wait(
-                    {rx, tx},
-                    return_when=asyncio.FIRST_EXCEPTION,
-                )
-        except Exception as error:
-            logger.error(f"Error in global. Error: {error}")
+            logger.info(f"Trying to reconnect to Mod")
+            await asyncio.sleep(5)
 
     async def _wsSendTask(self):
         logger.info("WS send task started")
@@ -553,7 +513,7 @@ class Mod:
 
             message = await self.tx_queue.get()
             try:
-                logger.info(f"TX WS : {message}")
+                logger.debug(f"TX WS : {message}")
                 await self.ws.send(message)
 
             except websockets.ConnectionClosed:
@@ -564,74 +524,59 @@ class Mod:
         logger.info("WS receive task started")
         try:
             async for message in self.ws:
-                logger.info(f"RX WS : {message}")
+                logger.debug(f"RX WS : {message}")
+                modMessage: ModMessage = parse_message(message)
 
-                event = None
-                if message.startswith("param_set"):
-                    s = message.split(" ")
-                    instance_id = s[1].replace("/graph/", "")
-                    symbol = s[2]
-                    value = s[3]
-
-                    if self._current_pedalboard_name:
-                        pedalboard = self.pedalboards.get(
-                            self._current_pedalboard_name, None
-                        )
-                        if not pedalboard:
-                            logger.error(
-                                f"Pedalboard {self._current_pedalboard_name} not found"
-                            )
-                            continue
-
-                        for plugin in pedalboard.plugins:
-                            if plugin.instance_id == instance_id:
-                                for param in plugin.params:
-                                    if param.symbol == symbol:
-                                        param.ranges["default"] = float(value)
-
-                        event = EventEffectParam(
-                            instance_id=instance_id,
-                            symbol=symbol,
-                            value=float(value),
-                        )
-
-                elif message.startswith("pedal_snapshot"):
-                    s = message.split(" ")
-                    index = s[1]
-                    name = s[2]
-                    logger.info(f"Snapshot changed: name:{name} id:{index}")
-                    self.pedalboards[self._current_pedalboard_name].snapshot_id = int(
-                        index
+                if isinstance(modMessage, LoadingEndMessage):
+                    await self._set_current_pedalboard(
+                        bundle=modMessage.pedalboard_bundle,
+                        snapshot_id=modMessage.snapshot_id,
                     )
-                    self._push_event(EventSnapshotChanged(index=int(index), name=name))
+                    self._push_event(
+                        EventPedalboardLoaded(
+                            pedalboard=asdict(self.current_pedalboard)
+                        )
+                    )
 
-                elif message.startswith("loading_start"):
-                    pass
-                elif message.startswith("loading_end"):
-                    pass
-                elif message == "ping":
-                    self.tx_queue.put_nowait("pong")
+                elif isinstance(modMessage, ParamSetMessage):
+                    for plugin in self.plugins.values():
+                        if plugin.instance_id == modMessage.instance:
+                            for param in plugin.params:
+                                if param.symbol == modMessage.symbol:
+                                    param.ranges["default"] = modMessage.value
 
-                if event:
-                    self._push_event(event)
+                                    if modMessage.symbol == ":bypass":
+                                        plugin.bypassed = bool(modMessage.value)
+
+                    self._push_event(
+                        EventEffectParam(
+                            instance_id=modMessage.instance,
+                            symbol=modMessage.symbol,
+                            value=modMessage.value,
+                        )
+                    )
+
+                elif isinstance(modMessage, PedalSnapshotMessage):
+                    await self._set_pedalboard_snapshots(
+                        snapshot_id=modMessage.snapshot_id
+                    )
+                    self._push_event(
+                        EventSnapshotChanged(
+                            index=modMessage.snapshot_id, name=modMessage.snapshot_name
+                        )
+                    )
 
         except websockets.ConnectionClosed:
             logger.info("Receiver disconnected")
+            raise
         except Exception as err:
-            logger.error(err)
+            logger.error(traceback.print_exc())
 
     async def setEffectParam(self, instance_id, symbol, value):
         try:
             self.tx_queue.put_nowait(f"param_set /graph/{instance_id}/{symbol} {value}")
-            if self._current_pedalboard_name:
-                pedalboard = self.pedalboards.get(self._current_pedalboard_name, None)
-                if not pedalboard:
-                    logger.error(
-                        f"Pedalboard {self._current_pedalboard_name} not found"
-                    )
-                    return
-
-                for plugin in pedalboard.plugins:
+            if self.current_pedalboard:
+                for plugin in self.current_pedalboard.plugins:
                     if plugin.instance_id == instance_id:
                         logger.info(f"Updating plugin {plugin.instance_id}")
                         for param in plugin.params:
@@ -644,8 +589,8 @@ class Mod:
 
     async def setPedalboardSnapshot(self, index: int):
         if (
-            index < len(self.pedalboards[self._current_pedalboard_name].snapshots)
-            and index != self.pedalboards[self._current_pedalboard_name].snapshot_id
+            index < len(self.current_pedalboard.snapshots)
+            and index != self.current_pedalboard.snapshot_id
         ):
             status, response = await self._request(
                 method="GET",
@@ -683,4 +628,4 @@ class Mod:
             logger.error(f"Unable to load pedalboard {pedalboard.bundle}")
             return
 
-        await self._get_pedalboard_snapshots()
+        # await self._set_pedalboard_snapshots()
