@@ -133,7 +133,7 @@ class Mod:
         self.plugins: dict[str, Plugin] = {}
         self.current_pedalboard: Pedalboard = None
 
-        self._data_path = Path("/home/marius/wks/git/guitare/mod-ui/data/")
+        self._data_path = Path("/home/marius/wks/git/guitare/pi-zoom/mod-ui/data/")
         self._last_pedalboard_path = Path(self._data_path, "last.json")
         self._pedalboards_folder = "/home/pedal/.pedalboards"
 
@@ -396,6 +396,9 @@ class Mod:
             return
 
         for pedalboard in _pedalboards:
+            if pedalboard.get("broken", False):
+                logger.info(f"Pedalboard {pedalboard.get("bundle")} is broken.")
+                continue
             await self._load_pedalboard(bundle=pedalboard["bundle"])
 
     async def _set_pedalboard_snapshots(self, snapshot_id: int = None):
@@ -528,6 +531,9 @@ class Mod:
                 modMessage: ModMessage = parse_message(message)
 
                 if isinstance(modMessage, LoadingEndMessage):
+                    if modMessage.pedalboard_bundle == "":
+                        continue
+
                     await self._set_current_pedalboard(
                         bundle=modMessage.pedalboard_bundle,
                         snapshot_id=modMessage.snapshot_id,

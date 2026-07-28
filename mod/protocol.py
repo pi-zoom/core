@@ -60,7 +60,7 @@ def parse_message(message: str) -> ModMessage:
             case ["loading_end", snapshot_id, pedalboard_bundle]:
                 return LoadingEndMessage(snapshot_id=int(snapshot_id), pedalboard_bundle=pedalboard_bundle)
             case ["loading_end"]:
-                return LoadingEndMessage(snapshot_id=0)
+                return LoadingEndMessage(snapshot_id=0, pedalboard_bundle="")
 
             case ["param_set", path, symbol, value]:
                 instance = path.removeprefix("/graph/")
