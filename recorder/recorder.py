@@ -41,8 +41,6 @@ class Recorder:
         for f in self.recorded_files:
             info = sf.info(os.path.join(self.output_path, f))
             min, sec = divmod(int(info.duration), 60)
-            print(f"File: {f} -> {min:02d}:{sec:02d}")
-
         self.eventQueue.put_nowait(EventRecordedFilesList(files=self.recorded_files))
 
     async def start_recording(self):
