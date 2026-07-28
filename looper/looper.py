@@ -92,7 +92,6 @@ class SooperLooperClient:
                 allPorts.append(v)
             elif isinstance(v, list):
                 allPorts += v
-        print(allPorts)
         if port.name not in allPorts:
             return
         logger.info(f"new port: {port.name}")
@@ -246,7 +245,6 @@ class SooperLooperClient:
                 logger.error(err)
 
     def ping(self):
-        logger.info("ping")
         self.sendQueue.put_nowait(
             OSCMessage(address="/ping", value=[f"{self.host}:9952", "/looper/pong"])
         )
