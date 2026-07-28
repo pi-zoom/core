@@ -144,7 +144,7 @@ class Sequencer:
             {
                 "address": "/sequencer/load_midi_file",
                 "value": [
-                    midi_file,
+                    str(Path.joinpath(Path(self._midi_folder).expanduser(), midi_file)),
                     f"localhost:{self.serverPort}",
                     "/sequencer/midi_file_info",
                 ],
