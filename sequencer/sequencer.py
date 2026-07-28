@@ -112,7 +112,7 @@ class Sequencer:
 
         while True:
             data = await self.sendQueue.get()
-            logger.info(f"sending : {data}")
+            logger.debug(f"sending : {data}")
             try:
                 self._send(data)
             except Exception as err:
@@ -134,7 +134,7 @@ class Sequencer:
         for file in Path(self._midi_folder).expanduser().iterdir():
             if file.is_file() and file.suffix in [".mid", ".midi"]:
                 self._midi_files.append(file.name)
-
+        self._midi_files.sort()
         self.eventsQueue.put_nowait(
             EventSequencerMidiFilesList(midiFiles=self._midi_files)
         )
