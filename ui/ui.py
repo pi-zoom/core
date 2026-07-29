@@ -95,6 +95,8 @@ class UI():
                     msg = CmdPlayerPlay(state=data_json["state"], file=data_json["file"])
                 elif command_type == 17:
                     msg = CmdPlayerListFiles()
+                elif command_type == 18:
+                    msg = CmdLooperSetLoopVolume(id=data_json["id"], volume=data_json["volume"])
                 else:
                     logger.error(f"Unknown ZMQ message type: {data_json}")
                     continue

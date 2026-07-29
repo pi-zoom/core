@@ -17,6 +17,11 @@ class CmdSelectLoop():
     id: int
 
 @dataclass
+class CmdLooperSetLoopVolume():
+    id: int
+    volume: float
+
+@dataclass
 class CmdListPedalboards():
     pass
 

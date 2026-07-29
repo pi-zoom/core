@@ -260,6 +260,11 @@ class SooperLooperClient:
             OSCMessage(address="/set", value=["selected_loop_num", float(loop)])
         )
 
+    def setLoopVolume(self, loop: int, volume: float):
+        self.sendQueue.put_nowait(
+            OSCMessage(address=f"/sl/{loop}/set", value=["wet", volume])
+        )
+
     def record(self, loop: int):
         self.sendQueue.put_nowait(
             OSCMessage(address=f"/sl/{loop}/hit", value=[SLCommand.RECORD.value])

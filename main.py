@@ -191,6 +191,10 @@ async def selectLoopHandler(event: CmdSelectLoop):
 
 
 @command_handler
+async def loopVolumeHandler(event: CmdLooperSetLoopVolume):
+    looper.setLoopVolume(loop=event.id, volume=event.volume)
+
+@command_handler
 async def selectPedalboardHandler(event: CmdSelectPedalboard):
     await mod.setPedalboard(name=event.name)
 
