@@ -90,17 +90,17 @@ class EventTuner(Event):
     cents: float
 
 @dataclass
-class EventRecordedFilesList(Event):
-    files: list[str]
+class EventPlayerFilesList(Event):
+    files: list
 
 @dataclass
-class EventRecorderPlaying(Event):
+class EventPlayerPlaying(Event):
     file: str
 
 @dataclass
-class EventRecorderRecording(Event):
+class EventPlayerRecording(Event):
     start: int
 
 @dataclass
-class EventRecorderStopped(Event):
+class EventPlayerStopped(Event):
     pass

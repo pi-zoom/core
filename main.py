@@ -9,7 +9,7 @@ from ui.ui import UI
 from mod.mod import Mod
 from sequencer.sequencer import Sequencer
 from tuner.tuner import Tuner
-from recorder.recorder import Recorder
+from player.player import Player
 
 from events import *
 from command import *
@@ -65,7 +65,7 @@ ui = UI(commandsQueue=commandsQueue)
 mod = Mod("localhost", 8888, eventsQueue=eventsQueue)
 sequencer = Sequencer(eventsQueue=eventsQueue)
 tuner = Tuner(queue=eventsQueue)
-recorder = Recorder(eventQueue=eventsQueue)
+player = Player(eventQueue=eventsQueue)
 
 # -----------------------------
 # Shutdown handling
@@ -106,7 +106,7 @@ async def loopSelectedHandler(event: EventLoopSelected):
 
 @event_handler
 async def loopListHandler(event: EventLoopsList):
-    await ui.send({"type": 5, "loops": event.loops, "selected": event.selected})
+    await ui.send({"type": 5, "loops": [asdict(x) for x in looper.loops], "selected": event.selected})
 
 @event_handler
 async def modListPedalboard(event: EventPedalboardList):
@@ -148,19 +148,19 @@ async def tunerUpdate(event: EventTuner):
     await ui.send({"type": 12, "note": event.note, "cents": event.cents})
 
 @event_handler
-async def recordedFileList(event: EventRecordedFilesList):
-    await ui.send({"type": 13, "files": event.files})
+async def playerFilesList(event: EventPlayerFilesList):
+    await ui.send({"type": 13, "files": [asdict(x) for x in event.files]})
 
 @event_handler
-async def recorderPlaying(event: EventRecorderPlaying):
+async def playerPlaying(event: EventPlayerPlaying):
     await ui.send({"type": 14, "file": event.file})
 
 @event_handler
-async def recorderRecording(event: EventRecorderRecording):
+async def playerRecording(event: EventPlayerRecording):
     await ui.send({"type": 15, "start": event.start})
 
 @event_handler
-async def recorderStopped(event: EventRecorderStopped):
+async def playerStopped(event: EventPlayerStopped):
     await ui.send({"type": 16})
 
 # -----------------------------
@@ -169,10 +169,7 @@ async def recorderStopped(event: EventRecorderStopped):
 
 @command_handler
 async def listLoopsHandler(_: CmdListLoops):
-    loops = []
-    for loop in looper.loops:
-        loops.append(asdict(loop))
-    eventsQueue.put_nowait(EventLoopsList(loops=loops, selected=looper.selectedLoop))
+    eventsQueue.put_nowait(EventLoopsList(loops=looper.loops, selected=looper.selectedLoop))
 
 
 @command_handler
@@ -259,21 +256,21 @@ async def tunerState(event: CmdTuner):
 @command_handler
 async def playerRecord(event: CmdPlayerRecord):
     if event.state:
-        await recorder.start_recording()
+        await player.start_recording()
     else:
-        await recorder.stop()
-        eventsQueue.put_nowait(EventRecordedFilesList(files=recorder.recorded_files))
+        await player.stop()
+        eventsQueue.put_nowait(EventPlayerFilesList(files=player.sound_files))
 
 @command_handler
 async def playerPlay(event: CmdPlayerPlay):
     if event.state:
-        await recorder.start_playing(filename=event.file)
+        await player.start_playing(filename=event.file)
     else:
-        await recorder.stop()
+        await player.stop()
 
 @command_handler
 async def playerListFiles(event: CmdPlayerListFiles):
-    eventsQueue.put_nowait(EventRecordedFilesList(files=recorder.recorded_files))
+    eventsQueue.put_nowait(EventPlayerFilesList(files=player.sound_files))
 
 async def processCommands():
     while True:
