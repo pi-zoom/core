@@ -1,7 +1,7 @@
 import zmq
 import zmq.asyncio
 import asyncio
-
+from dacite import from_dict
 import json
 import logging
 from events import *
@@ -53,53 +53,56 @@ class UI():
             try:
                 data = await self.subSocket.recv_string()
                 data_json = json.loads(data)
-
+                print(json.dumps(data_json, indent=4))
                 command_type = data_json.get("type", None)
                 if command_type is None:
                     logger.error(f"Unable to get command type. Message: {data_json}")
                     continue
 
-                if command_type == 0:
-                    msg = CmdAddLoop()
-                elif command_type == 1:
-                    msg = CmdRemoveLoop()
-                elif command_type == 2:
-                    msg = CmdSelectLoop(id=data_json.get("id"))
-                elif command_type == 3:
-                    msg = CmdListLoops()
-                elif command_type == 4:
-                    msg = CmdSelectPedalboard(name=data_json.get("name"))
-                elif command_type == 5:
-                    msg  = CmdSetEffectParam(instance_id=data_json["instance_id"], symbol=data_json["symbol"], value=data_json["value"])
-                elif command_type == 6:
-                    msg = CmdListPedalboards()
-                elif command_type == 7:
-                    msg = CmdSelectPedalboardSnapshot(index=data_json["index"])
-                elif command_type == 8:
-                    msg = CmdSequencerSetBpm(bpm=data_json["bpm"])
-                elif command_type == 9:
-                    msg = CmdSequencerSetVolume(volume=data_json["volume"])
-                elif command_type == 10:
-                    msg = CmdSequencerSelectMidiFile(file=data_json["file"])
-                elif command_type == 11:
-                    msg = CmdSequencerListMidiFiles()
-                elif command_type == 12:
-                    msg = CmdSequencerState(state=data_json["state"])
-                elif command_type == 13:
-                    msg = CmdSequencerMute(mute=data_json["mute"])
-                elif command_type == 14:
-                    msg = CmdTuner(state=data_json["state"])
-                elif command_type == 15:
-                    msg = CmdPlayerRecord(state=data_json["state"])
-                elif command_type == 16:
-                    msg = CmdPlayerPlay(state=data_json["state"], file=data_json["file"])
-                elif command_type == 17:
-                    msg = CmdPlayerListFiles()
-                elif command_type == 18:
-                    msg = CmdLooperSetLoopVolume(id=data_json["id"], volume=data_json["volume"])
-                else:
-                    logger.error(f"Unknown ZMQ message type: {data_json}")
+                try:
+                    cmd = Command(command_type)
+                    msg = None
+                    match cmd:
+                        case Command.CMD_LOOPER_ADD_LOOP:
+                            msg = from_dict(CmdAddLoop, data_json)
+                        case Command.CMD_LOOPER_REMOVE_LOOP:
+                            msg = from_dict(CmdRemoveLoop, data_json)
+                        case Command.CMD_LOOPER_SELECT_LOOP:
+                            msg = from_dict(CmdSelectLoop, data_json)
+                        case Command.CMD_LOOPER_LIST_LOOPS:
+                            msg = from_dict(CmdListLoops, data_json)
+                        case Command.CMD_LOOPER_SET_LOOP_VOLUME:
+                            msg = from_dict(CmdLooperSetLoopVolume, data_json)
+                        case Command.CMD_MOD_LIST_PEDALBOARDS:
+                            msg = from_dict(CmdListPedalboards, data_json)
+                        case Command.CMD_MOD_SELECT_PEDALBOARD:
+                            msg = from_dict(CmdSelectPedalboard, data_json)
+                        case Command.CMD_MOD_SELECT_SNAPSHOT:
+                            msg = from_dict(CmdSelectPedalboardSnapshot, data_json)
+                        case Command.CMD_MOD_SET_EFFECT_PARAM:
+                            msg = from_dict(CmdSetEffectParam, data_json)
+                        case Command.CMD_SEQUENCER_LIST_MIDI_FILES:
+                            msg = from_dict(CmdSequencerListMidiFiles, data_json)
+                        case Command.CMD_SEQUENCER_MUTE:
+                            msg = from_dict(CmdSequencerMute, data_json)
+                        case Command.CMD_SEQUENCER_PLAY:
+                            msg = from_dict(CmdSequencerPlay, data_json)
+                        case Command.CMD_SEQUENCER_SELECT_MIDI_FILE:
+                            msg = from_dict(CmdSequencerSelectMidiFile, data_json)
+                        case Command.CMD_SEQUENCER_SET_BPM:
+                            msg = from_dict(CmdSequencerSetBpm, data_json)
+                        case Command.CMD_SEQUENCER_SET_VOLUME:
+                            msg = from_dict(CmdSequencerSetVolume, data_json)
+                        case Command.CMD_PLAYER_LIST_FILES:
+                            msg = from_dict(CmdPlayerListFiles, data_json)
+                        case Command.CMD_PLAYER_SET_STATE:
+                            msg = from_dict(CmdPlayerState, data_json)
+
+                    if msg:
+                        self.commandsQueue.put_nowait(msg)
+                except ValueError:
+                    logger.error(f"Unknowed command {command_type}")
                     continue
-                self.commandsQueue.put_nowait(msg)
+
             except Exception as error:
                 logger.error(f"Error receiving ZMQ: {error}")

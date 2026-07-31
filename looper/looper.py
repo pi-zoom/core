@@ -167,7 +167,7 @@ class SooperLooperClient:
             self.loops[loop].state = value
 
     def _pongHandler(self, address, hostUrl, version, loopCount):
-        logger.info("pong")
+        logger.debug("pong")
         if not self.connected:
             logger.info("now connected")
             self.connected = True
@@ -186,7 +186,6 @@ class SooperLooperClient:
         self.eventsQueue.put_nowait(msg)
 
     def _loopCountUpdateHandler(self, address, hostUrl, version, loopCount):
-        print("************************ok")
         # if self.loopCount == loopCount:
         #     return
 

@@ -12,9 +12,9 @@ logger = logging.getLogger("player")
 
 
 class PlayerStates(Enum):
-    STOPPED = "stopped"
-    RECORDING = "recording"
-    PLAYING = "playing"
+    STOPPED = 0
+    PLAYING = 1
+    RECORDING = 2
 
 @dataclass
 class SoundFile:
@@ -55,7 +55,7 @@ class Player:
         self.process = await asyncio.create_subprocess_exec('jack_capture', '-ns', '-f', 'ogg', '-V', '-dc', filepath)
         self.state = PlayerStates.RECORDING
         logger.info("Recording started")
-        self.eventQueue.put_nowait(EventPlayerRecording(start=int(datetime.now(timezone.utc).timestamp())))
+        self.eventQueue.put_nowait(EventPlayerState(state=PlayerStates.RECORDING.value))
 
     async def stop(self):
 
@@ -73,7 +73,7 @@ class Player:
         self.state = PlayerStates.STOPPED
         self.list_sound_files()
         logger.info("Stopped")
-        self.eventQueue.put_nowait(EventPlayerStopped())
+        self.eventQueue.put_nowait(EventPlayerState(state=PlayerStates.STOPPED.value))
 
     async def _wait_playback_finished(self):
         process = self.process
@@ -82,7 +82,7 @@ class Player:
         if self.process is process:
             self.process = None
             self.state = PlayerStates.STOPPED
-            self.eventQueue.put_nowait(EventPlayerStopped())
+            self.eventQueue.put_nowait(EventPlayerState(state=PlayerStates.STOPPED.value))
 
     async def start_playing(self, filename: str):
         await self.stop()
@@ -95,4 +95,12 @@ class Player:
         self.state = PlayerStates.PLAYING
         logger.info("Playing started")
         self.play_task = asyncio.create_task(self._wait_playback_finished())
-        self.eventQueue.put_nowait(EventPlayerPlaying(file=filename))
+        self.eventQueue.put_nowait(EventPlayerState(state=PlayerStates.PLAYING.value))
+
+    async def set_state(self, state: int, file: str = None):
+        if state == PlayerStates.RECORDING.value:
+            await self.start_recording()
+        elif state == PlayerStates.PLAYING.value:
+            await self.start_playing(filename=file)
+        else:
+            await self.stop()
