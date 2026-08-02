@@ -17,12 +17,17 @@ from events import (
     EventPedalboardLoaded,
     EventEffectParam,
     EventSnapshotChanged,
+    EventTunerOutput,
+    EventTunerState,
 )
 from watchfiles import Change, awatch
 import re
 from graphlib import TopologicalSorter
 from collections import defaultdict
 from mod.protocol import (
+    DataReadyMessage,
+    TunerOutputMessage,
+    TunerStateMessage,
     parse_message,
     ModMessage,
     LoadingEndMessage,
@@ -516,7 +521,7 @@ class Mod:
 
             message = await self.tx_queue.get()
             try:
-                logger.debug(f"TX WS : {message}")
+                logger.info(f"TX WS : {message}")
                 await self.ws.send(message)
 
             except websockets.ConnectionClosed:
@@ -527,7 +532,7 @@ class Mod:
         logger.info("WS receive task started")
         try:
             async for message in self.ws:
-                logger.debug(f"RX WS : {message}")
+                logger.info(f"RX WS : {message}")
                 modMessage: ModMessage = parse_message(message)
 
                 if isinstance(modMessage, LoadingEndMessage):
@@ -569,6 +574,21 @@ class Mod:
                     self._push_event(
                         EventSnapshotChanged(
                             index=modMessage.snapshot_id, name=modMessage.snapshot_name
+                        )
+                    )
+
+                elif isinstance(modMessage, DataReadyMessage):
+                    self.tx_queue.put_nowait(f"data_ready {modMessage.count}")
+
+                elif isinstance(modMessage, TunerStateMessage):
+                    self._push_event(EventTunerState(state=bool(modMessage.state)))
+
+                elif isinstance(modMessage, TunerOutputMessage):
+                    self._push_event(
+                        EventTunerOutput(
+                            freq=modMessage.freq,
+                            note=modMessage.note,
+                            cents=modMessage.cents,
                         )
                     )
 
@@ -635,3 +655,10 @@ class Mod:
             return
 
         # await self._set_pedalboard_snapshots()
+
+    async def setTunerState(self, state: bool):
+        s = "on" if state else "off"
+        status, response = await self._request(method="GET", url=f"{self.mod_ui_url}/tuner/{s}")
+        if not status:
+            logger.error(f"Unable to set tuner state: {s}")
+            return

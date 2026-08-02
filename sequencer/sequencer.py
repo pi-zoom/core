@@ -6,6 +6,7 @@ from pythonosc.udp_client import SimpleUDPClient
 from pythonosc.osc_server import AsyncIOOSCUDPServer
 from pythonosc.dispatcher import Dispatcher
 from events import *
+import os
 
 DEFAULT_SEQUENCER_ADDR = "127.0.0.1"
 DEFAULT_SEQUENCER_PORT = 9999
@@ -48,8 +49,9 @@ class Sequencer:
         self._muted = False
         self._selectedMidiFileDuration = None
 
-        self._init_osc()
+        self._init_folder()
         self._list_midi_files()
+        self._init_osc()
 
     def _init_osc(self):
         self.dispatcher = Dispatcher()
@@ -71,6 +73,7 @@ class Sequencer:
             await self.oscServer.create_serve_endpoint()
         )
 
+        self.tasks.append(self._monitor_folder())
         self.tasks.append(self._sendTask())
         self.tasks.append(self._pingTask())
         await asyncio.gather(*self.tasks)
@@ -96,7 +99,7 @@ class Sequencer:
         print(f"{address} {midi_file} {duration}")
 
     def _pongHandler(self, address, *message):
-        logger.info("pong")
+        logger.debug("pong")
         if not self.connected:
             logger.info("now connected")
             self.connected = True
@@ -117,6 +120,40 @@ class Sequencer:
                 self._send(data)
             except Exception as err:
                 logger.error(err)
+
+    def _init_folder(self):
+        if not Path(self._midi_folder).expanduser().is_dir():
+            logger.info(f"MIDI folder {self._midi_folder} not found. Creating")
+            os.makedirs(str(Path(self._midi_folder).expanduser()))
+
+    async def _monitor_folder(self):
+        logger.info(
+            f"Starting monitoring on folder : {self._midi_folder}"
+        )
+        if not Path(self._midi_folder).expanduser().is_dir():
+            logger.error(f"MIDI folder {self._midi_folder} not found.")
+            return
+
+        while True:
+            async for changes in awatch("/home/marius/.midi/"):
+                for change, path in changes:
+                    if path.endswith(".mid") or path.endswith(".midi"):
+                        if change not in [Change.deleted, Change.added]:
+                            continue
+
+                        if change == Change.deleted:
+                            logger.info(f"midi file deleted: {path}")
+                            self._midi_files.remove(os.path.basename(path))
+                        elif change == Change.added:
+                            logger.info(f"New midi file detected: {path}")
+                            self._midi_files.append(os.path.basename(path))
+
+                        # make a method send_midi_list
+                        self._midi_files.sort()
+                        self.eventsQueue.put_nowait(
+                            EventSequencerMidiFilesList(midiFiles=self._midi_files)
+                        )
+
 
     @property
     def midi_files(self) -> list[str]:

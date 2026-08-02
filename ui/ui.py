@@ -13,7 +13,7 @@ DEFAULT_PUB_ADDR = "localhost"
 DEFAULT_PUB_PORT = 9956
 
 logger = logging.getLogger("ui")
-logger.setLevel(level=logging.DEBUG)
+logger.setLevel(level=logging.INFO)
 
 class UI():
     def __init__(
@@ -40,6 +40,7 @@ class UI():
 
     async def send(self, msg: dict):
         logger.debug(f"sending: {msg["type"]}")
+        print(msg)
         # msg = json.dumps(msg)
         await self.pubSocket.send_json(msg)
 
@@ -53,7 +54,6 @@ class UI():
             try:
                 data = await self.subSocket.recv_string()
                 data_json = json.loads(data)
-                print(json.dumps(data_json, indent=4))
                 command_type = data_json.get("type", None)
                 if command_type is None:
                     logger.error(f"Unable to get command type. Message: {data_json}")
@@ -97,6 +97,8 @@ class UI():
                             msg = from_dict(CmdPlayerListFiles, data_json)
                         case Command.CMD_PLAYER_SET_STATE:
                             msg = from_dict(CmdPlayerState, data_json)
+                        case Command.CMD_TUNER_STATE:
+                            msg = from_dict(CmdTunerState, data_json)
 
                     if msg:
                         self.commandsQueue.put_nowait(msg)

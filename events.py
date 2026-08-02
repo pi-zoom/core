@@ -20,6 +20,9 @@ class Event(Enum):
     EVENT_MOD_LIST_PEDALBOARDS = "mod_list_pedalboards"
     EVENT_MOD_SELECT_SNAPSHOT = "mod_select_snapshot"
 
+    EVENT_TUNER_STATE = "tuner_state"
+    EVENT_TUNER_OUTPUT = "tuner_output"
+
     EVENT_SEQUENCER_LIST_MIDI_FILES = "sequencer_list_files"
     EVENT_SEQUENCER_POS = "sequencer_pos"
 
@@ -106,7 +109,12 @@ class EventSequencerPos:
     pos: float
 
 @dataclass
-class EventTuner:
+class EventTunerState:
+    state: bool
+
+@dataclass
+class EventTunerOutput:
+    freq: float
     note: str
     cents: float
 
@@ -117,3 +125,5 @@ class EventPlayerFilesList:
 @dataclass
 class EventPlayerState:
     state: int
+
+

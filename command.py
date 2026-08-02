@@ -23,6 +23,8 @@ class Command(Enum):
     CMD_PLAYER_SET_STATE = "player_state"
     CMD_PLAYER_LIST_FILES = "player_list_files"
 
+    CMD_TUNER_STATE = "tuner_state"
+
 
 @dataclass
 class CmdListLoops:
@@ -103,7 +105,7 @@ class CmdSequencerMute:
 
 
 @dataclass
-class CmdTuner:
+class CmdTunerState:
     state: bool
 
 

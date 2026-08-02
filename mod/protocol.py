@@ -36,6 +36,20 @@ class PedalSnapshotMessage:
     snapshot_id: int
     snapshot_name: str
 
+@dataclass
+class TunerStateMessage:
+    state: bool
+
+@dataclass
+class TunerOutputMessage:
+    freq: float
+    note: str
+    cents: float
+
+@dataclass
+class DataReadyMessage:
+    count: int
+
 # Union of all message types
 ModMessage = Union[
     LoadingStartMessage,
@@ -83,6 +97,17 @@ def parse_message(message: str) -> ModMessage:
 
             case ["pedal_snapshot"]:
                 return PedalSnapshotMessage(snapshot_id=0, snapshot_name="")
+
+            case ["data_ready", count]:
+                return DataReadyMessage(count=count)
+
+            case ["tuner", state]:
+                print(message)
+                return TunerStateMessage(state=state)
+
+            case ["tuner_output", freq, note, cents]:
+                return TunerOutputMessage(freq=float(freq), note=note, cents=float(cents))
+
 
     except Exception as error:
         print(error)

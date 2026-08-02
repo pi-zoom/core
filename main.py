@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.INFO, format="[%(levelname)s] - %(name)s - %(message)s"
 )
 logger = logging.getLogger("app")
-logger.setLevel(level=logging.DEBUG)
+logger.setLevel(level=logging.INFO)
 
 
 eventHandlers = {}
@@ -67,6 +67,7 @@ sequencer = Sequencer(eventsQueue=eventsQueue)
 tuner = Tuner(queue=eventsQueue)
 player = Player(eventQueue=eventsQueue)
 
+
 # -----------------------------
 # Shutdown handling
 # -----------------------------
@@ -86,17 +87,27 @@ async def loopCountHandler(event: EventLoopCount):
 
 @event_handler
 async def loopPosHandler(event: EventLoopPos):
-    await ui.send({"type": Event.EVENT_LOOPER_LOOP_POS.value, "id": event.id, "pos": event.pos})
+    await ui.send(
+        {"type": Event.EVENT_LOOPER_LOOP_POS.value, "id": event.id, "pos": event.pos}
+    )
 
 
 @event_handler
 async def loopLenHandler(event: EventLoopLen):
-    await ui.send({"type": Event.EVENT_LOOPER_LOOP_LEN.value, "id": event.id, "len": event.len})
+    await ui.send(
+        {"type": Event.EVENT_LOOPER_LOOP_LEN.value, "id": event.id, "len": event.len}
+    )
 
 
 @event_handler
 async def loopStateHandler(event: EventLoopState):
-    await ui.send({"type": Event.EVENT_LOOPER_LOOP_STATE.value, "id": event.id, "state": event.state})
+    await ui.send(
+        {
+            "type": Event.EVENT_LOOPER_LOOP_STATE.value,
+            "id": event.id,
+            "state": event.state,
+        }
+    )
 
 
 @event_handler
@@ -106,16 +117,33 @@ async def loopSelectedHandler(event: EventLoopSelected):
 
 @event_handler
 async def loopListHandler(event: EventLoopsList):
-    await ui.send({"type": Event.EVENT_LOOPER_LIST_LOOPS.value, "loops": [asdict(x) for x in looper.loops], "selected": event.selected})
+    await ui.send(
+        {
+            "type": Event.EVENT_LOOPER_LIST_LOOPS.value,
+            "loops": [asdict(x) for x in looper.loops],
+            "selected": event.selected,
+        }
+    )
+
 
 @event_handler
 async def modListPedalboard(event: EventPedalboardList):
-    await ui.send({"type": Event.EVENT_MOD_LIST_PEDALBOARDS.value, "pedalboards": event.pedalboards})
+    await ui.send(
+        {
+            "type": Event.EVENT_MOD_LIST_PEDALBOARDS.value,
+            "pedalboards": event.pedalboards,
+        }
+    )
 
 
 @event_handler
 async def modPedalboardLoaded(event: EventPedalboardLoaded):
-    await ui.send({"type": Event.EVENT_MOD_SELECT_PEDALBOARD.value, "pedalboard": event.pedalboard})
+    await ui.send(
+        {
+            "type": Event.EVENT_MOD_SELECT_PEDALBOARD.value,
+            "pedalboard": event.pedalboard,
+        }
+    )
 
 
 @event_handler
@@ -132,24 +160,53 @@ async def modEffectParam(event: EventEffectParam):
 
 @event_handler
 async def modSnapshotChanged(event: EventSnapshotChanged):
-    await ui.send({"type": Event.EVENT_MOD_SELECT_SNAPSHOT.value, "index": event.index, "name": event.name})
+    await ui.send(
+        {
+            "type": Event.EVENT_MOD_SELECT_SNAPSHOT.value,
+            "index": event.index,
+            "name": event.name,
+        }
+    )
+
 
 @event_handler
 async def sequencerMidiFilesList(event: EventSequencerMidiFilesList):
-    await ui.send({"type": Event.EVENT_SEQUENCER_LIST_MIDI_FILES.value, "files": event.midiFiles})
+    await ui.send(
+        {"type": Event.EVENT_SEQUENCER_LIST_MIDI_FILES.value, "files": event.midiFiles}
+    )
+
 
 @event_handler
 async def sequencerPosition(event: EventSequencerPos):
     await ui.send({"type": Event.EVENT_SEQUENCER_POS.value, "pos": event.pos})
 
+
 @event_handler
-async def tunerUpdate(event: EventTuner):
-    print(f"Note: {event.note} Cents: {event.cents}")
-    await ui.send({"type": 12, "note": event.note, "cents": event.cents})
+async def tunerState(event: EventTunerState):
+    await ui.send({"type": Event.EVENT_TUNER_STATE.value, "state": event.state})
+
+
+@event_handler
+async def tunerOutput(event: EventTunerOutput):
+    await ui.send(
+        {
+            "type": Event.EVENT_TUNER_OUTPUT.value,
+            "freq": event.freq,
+            "note": event.note,
+            "cents": event.cents,
+        }
+    )
+
 
 @event_handler
 async def playerFilesList(event: EventPlayerFilesList):
-    await ui.send({"type": Event.EVENT_PLAYER_LIST_FILES.value, "files": [asdict(x) for x in event.files]})
+    await ui.send(
+        {
+            "type": Event.EVENT_PLAYER_LIST_FILES.value,
+            "files": [asdict(x) for x in event.files],
+        }
+    )
+
 
 @event_handler
 async def playerState(event: EventPlayerState):
@@ -160,9 +217,12 @@ async def playerState(event: EventPlayerState):
 # Commnands handling
 # -----------------------------
 
+
 @command_handler
 async def listLoopsHandler(_: CmdListLoops):
-    eventsQueue.put_nowait(EventLoopsList(loops=looper.loops, selected=looper.selectedLoop))
+    eventsQueue.put_nowait(
+        EventLoopsList(loops=looper.loops, selected=looper.selectedLoop)
+    )
 
 
 @command_handler
@@ -183,6 +243,7 @@ async def selectLoopHandler(event: CmdSelectLoop):
 @command_handler
 async def loopVolumeHandler(event: CmdLooperSetLoopVolume):
     looper.setLoopVolume(loop=event.id, volume=event.volume)
+
 
 @command_handler
 async def selectPedalboardHandler(event: CmdSelectPedalboard):
@@ -206,7 +267,9 @@ async def listPedalboardsHandler(event: CmdListPedalboards):
     )
 
     if mod.current_pedalboard:
-        eventsQueue.put_nowait(EventPedalboardLoaded(pedalboard=asdict(mod.current_pedalboard)))
+        eventsQueue.put_nowait(
+            EventPedalboardLoaded(pedalboard=asdict(mod.current_pedalboard))
+        )
 
 
 @command_handler
@@ -223,50 +286,41 @@ async def sequencerSetBpm(event: CmdSequencerSetBpm):
 async def sequencerSetVolume(event: CmdSequencerSetVolume):
     sequencer.set_volume(volume=event.volume)
 
+
 @command_handler
 async def sequencerSelectMidiFile(event: CmdSequencerSelectMidiFile):
     sequencer.set_selected_midi_file(midi_file=event.file)
+
 
 @command_handler
 async def sequencerListMidiFiles(event: CmdSequencerListMidiFiles):
     eventsQueue.put_nowait(EventSequencerMidiFilesList(midiFiles=sequencer.midi_files))
 
+
 @command_handler
 async def sequencerState(event: CmdSequencerPlay):
     sequencer.set_state(play=event.state)
+
 
 @command_handler
 async def sequencerMute(event: CmdSequencerMute):
     sequencer.set_mute(mute=event.mute)
 
+
 @command_handler
-async def tunerState(event: CmdTuner):
-    if(event.state):
-        await tuner.start(loop=asyncio.get_event_loop())
-    else:
-        await tuner.stop()
+async def tunerState(event: CmdTunerState):
+    await mod.setTunerState(event.state)
+
 
 @command_handler
 async def playerState(event: CmdPlayerState):
     await player.set_state(state=event.state, file=event.file)
-# @command_handler
-# async def playerRecord(event: CmdPlayerRecord):
-#     if event.state:
-#         await player.start_recording()
-#     else:
-#         await player.stop()
-#         eventsQueue.put_nowait(EventPlayerFilesList(files=player.sound_files))
 
-# @command_handler
-# async def playerPlay(event: CmdPlayerPlay):
-#     if event.state:
-#         await player.start_playing(filename=event.file)
-#     else:
-#         await player.stop()
 
 @command_handler
 async def playerListFiles(event: CmdPlayerListFiles):
     eventsQueue.put_nowait(EventPlayerFilesList(files=player.sound_files))
+
 
 async def processCommands():
     while True:
